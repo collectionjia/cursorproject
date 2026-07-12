@@ -1,0 +1,36 @@
+# 大文件 / 二进制（不要推到 GitHub）
+*.exe
+*.exe.*
+*.i64
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
+*.zip
+AIAssistant-360.exe_extracted/
+_repack_work/
+_verify.pyz
+
+# 分析临时文件
+*.txt
+!README_MACOS.txt
+!GITHUB_ACTIONS_步骤.txt
+log.log
+
+# Python
+__pycache__/
+*.pyc
+!macos_build_kit/patched_pyc/**/*.pyc
+.venv/
+venv/
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+assets/
+
+# 本地 macOS 工具包输出（zip 会重新生成）
+macos_build_kit/
