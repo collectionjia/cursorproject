@@ -13,13 +13,20 @@ on:
         required: false
         type: string
         default: ""
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-macos.yml"
+      - ".github/scripts/extract_macos_app.sh"
+      - "build_macos.py"
+      - "patch_no_renew_menu.py"
 
 jobs:
   build-arm64:
     name: Apple Silicon (arm64)
     runs-on: macos-14
     env:
-      DOWNLOAD_URL: ${{ inputs.arm64_zip_url != '' && inputs.arm64_zip_url || 'https://github.com/collectionjia/cursorproject/releases/download/v1.0-original-arm64/AIAssistant-m-360.dmg' }}
+      DOWNLOAD_URL: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.arm64_zip_url != '' && github.event.inputs.arm64_zip_url || 'https://github.com/collectionjia/cursorproject/releases/download/v1.0-original-arm64/AIAssistant-m-360.dmg' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -59,9 +66,9 @@ jobs:
   build-x86_64:
     name: Intel (x86_64)
     runs-on: macos-13
-    if: ${{ inputs.x86_zip_url != '' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.x86_zip_url != '' }}
     env:
-      DOWNLOAD_URL: ${{ inputs.x86_zip_url }}
+      DOWNLOAD_URL: ${{ github.event.inputs.x86_zip_url }}
     steps:
       - uses: actions/checkout@v4
 
