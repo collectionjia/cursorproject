@@ -38,13 +38,23 @@ jobs:
       - name: Install PyInstaller
         run: python -m pip install pyinstaller
 
+      - name: Install extract tools
+        run: brew install p7zip
+
       - name: Extract original arm64 app (dmg or zip)
         id: extract
         run: |
+          echo "DOWNLOAD_URL=$DOWNLOAD_URL"
           chmod +x .github/scripts/extract_macos_app.sh
           set -x
           mkdir -p extract_input
-          APP_PATH="$(.github/scripts/extract_macos_app.sh "$DOWNLOAD_URL" 2>extract_input/extract.log)"
+          if ! APP_PATH="$(.github/scripts/extract_macos_app.sh "$DOWNLOAD_URL" 2>extract_input/extract.log)"; then
+            echo "::group::extract.log"
+            cat extract_input/extract.log || true
+            echo "::endgroup::"
+            find extract_input -maxdepth 5 2>/dev/null || true
+            exit 1
+          fi
           echo "INPUT_APP=$APP_PATH" >> "$GITHUB_ENV"
           ls -la "$APP_PATH/Contents/MacOS" || true
 
@@ -93,12 +103,19 @@ jobs:
       - name: Install PyInstaller
         run: python -m pip install pyinstaller
 
+      - name: Install extract tools
+        run: brew install p7zip
+
       - name: Extract original x86_64 app (dmg or zip)
         run: |
+          echo "DOWNLOAD_URL=$DOWNLOAD_URL"
           chmod +x .github/scripts/extract_macos_app.sh
           set -x
           mkdir -p extract_input
-          APP_PATH="$(.github/scripts/extract_macos_app.sh "$DOWNLOAD_URL" 2>extract_input/extract.log)"
+          if ! APP_PATH="$(.github/scripts/extract_macos_app.sh "$DOWNLOAD_URL" 2>extract_input/extract.log)"; then
+            cat extract_input/extract.log || true
+            exit 1
+          fi
           echo "INPUT_APP=$APP_PATH" >> "$GITHUB_ENV"
           ls -la "$APP_PATH/Contents/MacOS" || true
 

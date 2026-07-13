@@ -6,6 +6,11 @@ log() { echo "$@" >&2; }
 
 URL="$1"
 WORKDIR="${2:-extract_input}"
+DEFAULT_URL="https://github.com/collectionjia/cursorproject/releases/download/v1.0-original-arm64/AIAssistant-m-360.dmg"
+
+if [ -z "${URL}" ] || [ "${URL}" = "false" ]; then
+  URL="$DEFAULT_URL"
+fi
 
 rm -rf "$WORKDIR"
 mkdir -p "$WORKDIR"
@@ -34,25 +39,58 @@ is_macho() {
   file -b "$f" | grep -qi 'Mach-O'
 }
 
+pick_best_app() {
+  local root="$1"
+  local best_app="" best_size=0 app macos_dir exe size
+
+  while IFS= read -r app; do
+    macos_dir="$app/Contents/MacOS"
+    [ -d "$macos_dir" ] || continue
+    while IFS= read -r exe; do
+      [ -f "$exe" ] || continue
+      is_macho "$exe" || continue
+      size="$(stat -f%z "$exe" 2>/dev/null || echo 0)"
+      if [ "$size" -gt "$best_size" ]; then
+        best_size="$size"
+        best_app="$app"
+      fi
+    done < <(find "$macos_dir" -maxdepth 1 -type f ! -name '.*' 2>/dev/null)
+  done < <(find "$root" -maxdepth 14 -name '*.app' -type d ! -path '*/.*' 2>/dev/null)
+
+  if [ -n "$best_app" ]; then
+    echo "$best_app"
+    return 0
+  fi
+
+  local bundle
+  while IFS= read -r bundle; do
+    [ -d "$bundle/Contents/MacOS" ] || continue
+  done < <(find "$root" -maxdepth 14 -type d -path '*/Contents/MacOS' ! -path '*/.*' 2>/dev/null | while read -r macos; do dirname "$(dirname "$macos")"; done | sort -u)
+
+  return 1
+}
+
 find_bundle_root() {
   local root="$1"
-
   local app
-  app="$(find "$root" -maxdepth 12 -name '*.app' -type d ! -path '*/.*' 2>/dev/null | head -1 || true)"
-  if [ -n "$app" ]; then
+  app="$(pick_best_app "$root" || true)"
+  if [ -n "$app" ] && [ -d "$app" ]; then
     echo "$app"
     return 0
   fi
 
-  local macos_dir
+  local macos_dir bundle
   while IFS= read -r macos_dir; do
-    local bundle
     bundle="$(dirname "$(dirname "$macos_dir")")"
     if [ -d "$bundle/Contents/MacOS" ]; then
-      echo "$bundle"
-      return 0
+      local exe_count
+      exe_count="$(find "$macos_dir" -maxdepth 1 -type f ! -name '.*' 2>/dev/null | wc -l | tr -d ' ')"
+      if [ "$exe_count" -gt 0 ]; then
+        echo "$bundle"
+        return 0
+      fi
     fi
-  done < <(find "$root" -maxdepth 12 -type d -path '*/Contents/MacOS' ! -path '*/.*' 2>/dev/null)
+  done < <(find "$root" -maxdepth 14 -type d -path '*/Contents/MacOS' ! -path '*/.*' 2>/dev/null)
 
   return 1
 }
@@ -129,22 +167,22 @@ extract_from_dir() {
   return 1
 }
 
-ensure_unar() {
-  if command -v unar >/dev/null 2>&1; then
+ensure_7z() {
+  if command -v 7z >/dev/null 2>&1; then
     return 0
   fi
-  log "Installing unar via Homebrew..."
-  brew install unar
+  log "Installing p7zip via Homebrew..."
+  brew install p7zip
 }
 
-extract_dmg_with_unar() {
+extract_dmg_with_7z() {
   local dmg="$1"
   local outdir="$2"
-  ensure_unar
+  ensure_7z
   rm -rf "$outdir"
   mkdir -p "$outdir"
-  log "Extracting dmg with unar..."
-  unar -f -o "$outdir" "$dmg" >&2
+  log "Extracting dmg with 7z..."
+  7z x -y "$dmg" -o"$outdir" >&2 || true
 }
 
 extract_dmg_with_hdiutil() {
@@ -160,16 +198,15 @@ lower="$(echo "$fname" | tr '[:upper:]' '[:lower:]')"
 ftype="$(file -b "$fname")"
 if [[ "$lower" == *.dmg ]] || echo "$ftype" | grep -qi 'disk image\|xar\|zlib'; then
   log "Processing DMG..."
-  UNAR_OUT="$WORKDIR/unar_out"
-  if extract_dmg_with_unar "$fname" "$UNAR_OUT" && extract_from_dir "$UNAR_OUT"; then
-  :
-  else
-    log "unar failed, trying hdiutil..."
-    MOUNTPOINT="$WORKDIR/mnt"
-    MOUNTED_AT="$(extract_dmg_with_hdiutil "$fname" "$MOUNTPOINT")"
-    trap 'hdiutil detach "$MOUNTED_AT" 2>/dev/null || true' EXIT
-    extract_from_dir "$MOUNTED_AT"
+  SEVEN_OUT="$WORKDIR/7z_out"
+  if extract_dmg_with_7z "$fname" "$SEVEN_OUT" && extract_from_dir "$SEVEN_OUT"; then
+    exit 0
   fi
+  log "7z failed, trying hdiutil..."
+  MOUNTPOINT="$WORKDIR/mnt"
+  MOUNTED_AT="$(extract_dmg_with_hdiutil "$fname" "$MOUNTPOINT")"
+  trap 'hdiutil detach "$MOUNTED_AT" 2>/dev/null || true' EXIT
+  extract_from_dir "$MOUNTED_AT"
 elif [[ "$lower" == *.zip ]] || echo "$ftype" | grep -qi 'zip'; then
   log "Extracting from ZIP..."
   unzip -q "$fname"
