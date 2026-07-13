@@ -145,7 +145,7 @@ extract_from_dir() {
   if bundle="$(find_bundle_root "$root")" && [ -n "$bundle" ] && [ -d "$bundle" ]; then
     log "Found bundle root: $bundle"
     rm -rf ./output.app
-    cp -R "$bundle" ./output.app
+    ditto "$bundle" ./output.app
     printf '%s\n' "$(pwd)/output.app"
     return 0
   fi
@@ -186,22 +186,22 @@ extract_dmg_with_hdiutil() {
   log "Extracting dmg with hdiutil..."
   mkdir -p "$mountpoint"
   hdiutil attach -nobrowse -readonly -skip-license-agreement -mountpoint "$mountpoint" "$dmg" >&2
-  echo "$mountpoint"
 }
 
 lower="$(echo "$fname" | tr '[:upper:]' '[:lower:]')"
 ftype="$(file -b "$fname")"
 if [[ "$lower" == *.dmg ]] || echo "$ftype" | grep -qi 'disk image\|xar\|zlib'; then
   log "Processing DMG..."
-  SEVEN_OUT="$WORKDIR/7z_out"
-  if extract_dmg_with_7z "$fname" "$SEVEN_OUT" && extract_from_dir "$SEVEN_OUT"; then
+  MOUNTPOINT="$WORKDIR/mnt"
+  if extract_dmg_with_hdiutil "$fname" "$MOUNTPOINT" && extract_from_dir "$MOUNTPOINT"; then
+    hdiutil detach "$MOUNTPOINT" 2>/dev/null || true
     exit 0
   fi
-  log "7z failed, trying hdiutil..."
-  MOUNTPOINT="$WORKDIR/mnt"
-  MOUNTED_AT="$(extract_dmg_with_hdiutil "$fname" "$MOUNTPOINT")"
-  trap 'hdiutil detach "$MOUNTED_AT" 2>/dev/null || true' EXIT
-  extract_from_dir "$MOUNTED_AT"
+  hdiutil detach "$MOUNTPOINT" 2>/dev/null || true
+  log "hdiutil failed, trying 7z..."
+  SEVEN_OUT="$WORKDIR/7z_out"
+  extract_dmg_with_7z "$fname" "$SEVEN_OUT"
+  extract_from_dir "$SEVEN_OUT"
 elif [[ "$lower" == *.zip ]] || echo "$ftype" | grep -qi 'zip'; then
   log "Extracting from ZIP..."
   unzip -q "$fname"

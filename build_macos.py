@@ -91,7 +91,20 @@ def extract_bundle(binary: Path) -> Path:
 
 
 def remove_quarantine(app_path: Path) -> None:
-    subprocess.run(["xattr", "-dr", "com.apple.quarantine", str(app_path)], check=False)
+    subprocess.run(["xattr", "-cr", str(app_path)], check=False)
+
+
+def codesign_app(app_path: Path) -> None:
+    proc = subprocess.run(
+        ["codesign", "--force", "--deep", "--sign", "-", str(app_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        print(f"warning: codesign failed: {proc.stderr.strip()}")
+    else:
+        print(f"codesigned {app_path}")
 
 
 def build_app(input_app: Path, output_app: Path, arch: str, *, force: bool) -> None:
@@ -113,6 +126,7 @@ def build_app(input_app: Path, output_app: Path, arch: str, *, force: bool) -> N
     extracted = extract_bundle(binary)
     patcher.build_patched_bundle(binary, binary, extracted)
     remove_quarantine(output_app)
+    codesign_app(output_app)
     print(f"Built {output_app}")
 
 
