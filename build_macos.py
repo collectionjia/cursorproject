@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """Build patched AIAssistant-360 macOS bundles for Apple Silicon and Intel.
 
-Run this script on macOS with Python 3.11:
+Run this script on macOS with Python 3.12:
 
   # Apple Silicon (M1/M2/M3...)
-  python3.11 build_macos.py --arch arm64 \\
+  python3.12 build_macos.py --arch arm64 \\
       --input AIAssistant-360-arm64.app \\
       --output AIAssistant-360-no-renew-arm64.app
 
   # Intel Mac
-  python3.11 build_macos.py --arch x86_64 \\
+  python3.12 build_macos.py --arch x86_64 \\
       --input AIAssistant-360-x86_64.app \\
       --output AIAssistant-360-no-renew-x86_64.app
 
 Requirements:
   - macOS host (cannot cross-build a runnable .app from Windows)
-  - Python 3.11 (same major version as the original bundle)
+  - Python 3.12 (same major version as the original bundle)
   - pyinstaller: pip install pyinstaller
   - Original unpatched .app for each CPU architecture
 """

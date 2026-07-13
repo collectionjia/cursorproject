@@ -223,7 +223,8 @@ def load_code(path: Path) -> types.CodeType:
 
 
 def save_code(path: Path, code: types.CodeType) -> None:
-    path.write_bytes(PYC_HEADER + marshal.dumps(code))
+    header = path.read_bytes()[:16] if path.exists() else PYC_HEADER
+    path.write_bytes(header + marshal.dumps(code))
 
 
 def replace_nested_code(root: types.CodeType, name: str, replacer) -> types.CodeType:

@@ -62,11 +62,6 @@ pick_best_app() {
     return 0
   fi
 
-  local bundle
-  while IFS= read -r bundle; do
-    [ -d "$bundle/Contents/MacOS" ] || continue
-  done < <(find "$root" -maxdepth 14 -type d -path '*/Contents/MacOS' ! -path '*/.*' 2>/dev/null | while read -r macos; do dirname "$(dirname "$macos")"; done | sort -u)
-
   return 1
 }
 

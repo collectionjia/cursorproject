@@ -30,10 +30,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Install PyInstaller
         run: python -m pip install pyinstaller
@@ -74,7 +74,7 @@ jobs:
           python build_macos.py --arch arm64 \
             --input "$INPUT_APP" \
             --output AIAssistant-360-no-renew-arm64.app \
-            --force
+            --force 2>&1 | tee build.log || (cat build.log && exit 1)
 
       - name: Zip output
         run: zip -r AIAssistant-360-no-renew-arm64.zip AIAssistant-360-no-renew-arm64.app
@@ -95,10 +95,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Install PyInstaller
         run: python -m pip install pyinstaller
