@@ -5,17 +5,21 @@ on:
     inputs:
       arm64_zip_url:
         description: "Apple Silicon 原版安装包直链（支持 .dmg 或 .zip，arm64）"
-        required: true
-        type: string
-      x86_zip_url:
-        description: "Intel 原版安装包直链（支持 .dmg 或 .zip，x86_64）"
         required: false
         type: string
+        default: "https://github.com/collectionjia/cursorproject/releases/download/v1.0-original-arm64/AIAssistant-m-360.dmg"
+      x86_zip_url:
+        description: "Intel 原版安装包直链（支持 .dmg 或 .zip，x86_64；留空则只打 arm64）"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   build-arm64:
     name: Apple Silicon (arm64)
     runs-on: macos-14
+    env:
+      DOWNLOAD_URL: ${{ inputs.arm64_zip_url != '' && inputs.arm64_zip_url || 'https://github.com/collectionjia/cursorproject/releases/download/v1.0-original-arm64/AIAssistant-m-360.dmg' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -30,8 +34,10 @@ jobs:
       - name: Extract original arm64 app (dmg or zip)
         run: |
           chmod +x .github/scripts/extract_macos_app.sh
-          APP_PATH="$(.github/scripts/extract_macos_app.sh "${{ inputs.arm64_zip_url }}")"
+          set -x
+          APP_PATH="$(.github/scripts/extract_macos_app.sh "$DOWNLOAD_URL")"
           echo "INPUT_APP=$APP_PATH" >> "$GITHUB_ENV"
+          ls -la "$APP_PATH/Contents/MacOS" || true
 
       - name: Build patched arm64 app
         run: |
@@ -54,6 +60,8 @@ jobs:
     name: Intel (x86_64)
     runs-on: macos-13
     if: ${{ inputs.x86_zip_url != '' }}
+    env:
+      DOWNLOAD_URL: ${{ inputs.x86_zip_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -68,8 +76,10 @@ jobs:
       - name: Extract original x86_64 app (dmg or zip)
         run: |
           chmod +x .github/scripts/extract_macos_app.sh
-          APP_PATH="$(.github/scripts/extract_macos_app.sh "${{ inputs.x86_zip_url }}")"
+          set -x
+          APP_PATH="$(.github/scripts/extract_macos_app.sh "$DOWNLOAD_URL")"
           echo "INPUT_APP=$APP_PATH" >> "$GITHUB_ENV"
+          ls -la "$APP_PATH/Contents/MacOS" || true
 
       - name: Build patched x86_64 app
         run: |

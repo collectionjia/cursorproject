@@ -2,6 +2,8 @@
 # Extract .app from a remote zip or dmg URL (macOS only).
 set -euo pipefail
 
+log() { echo "$@" >&2; }
+
 URL="$1"
 WORKDIR="${2:-extract_input}"
 
@@ -14,44 +16,42 @@ if [ -z "$fname" ] || [ "$fname" = "/" ]; then
   fname="input.bin"
 fi
 
-echo "Downloading: $URL"
+log "Downloading: $URL"
 curl -fL "$URL" -o "$fname"
+ls -lah "$fname" >&2
+file "$fname" >&2
 
 extract_from_dir() {
   local root="$1"
+  log "Listing mount/root: $root"
+  ls -la "$root" >&2 || true
+
   local app
-  app="$(find "$root" -name '*.app' -type d ! -path '*/.*' | head -1)"
+  app="$(find "$root" -maxdepth 8 -name '*.app' -type d ! -path '*/.*' 2>/dev/null | head -1 || true)"
   if [ -z "$app" ]; then
-    echo "No .app found under $root"
-    find "$root" -maxdepth 4 \( -type f -o -type d \) | head -50
+    log "No .app found under $root"
+    find "$root" -maxdepth 8 \( -type f -o -type d \) 2>/dev/null | head -80 >&2
     exit 1
   fi
-  echo "Found app: $app"
+  log "Found app: $app"
   cp -R "$app" ./output.app
-  echo "INPUT_APP=$(pwd)/output.app"
+  printf '%s\n' "$(pwd)/output.app"
 }
 
 lower="$(echo "$fname" | tr '[:upper:]' '[:lower:]')"
-if [[ "$lower" == *.dmg ]]; then
-  echo "Extracting from DMG..."
-  mount_point="$(hdiutil attach -nobrowse -readonly "$fname" | tail -1 | awk '{print $NF}')"
-  trap 'hdiutil detach "$mount_point" 2>/dev/null || true' EXIT
-  extract_from_dir "$mount_point"
-elif [[ "$lower" == *.zip ]]; then
-  echo "Extracting from ZIP..."
+ftype="$(file -b "$fname")"
+if [[ "$lower" == *.dmg ]] || echo "$ftype" | grep -qi 'disk image\|xar\|zlib'; then
+  log "Extracting from DMG..."
+  MOUNTPOINT="$WORKDIR/mnt"
+  mkdir -p "$MOUNTPOINT"
+  hdiutil attach -nobrowse -readonly -mountpoint "$MOUNTPOINT" "$fname" >&2
+  trap 'hdiutil detach "$MOUNTPOINT" 2>/dev/null || true' EXIT
+  extract_from_dir "$MOUNTPOINT"
+elif [[ "$lower" == *.zip ]] || echo "$ftype" | grep -qi 'zip'; then
+  log "Extracting from ZIP..."
   unzip -q "$fname"
   extract_from_dir "."
 else
-  file_type="$(file -b "$fname")"
-  if echo "$file_type" | grep -qi 'zip'; then
-    unzip -q "$fname"
-    extract_from_dir "."
-  elif echo "$file_type" | grep -qi 'zlib\|xar\|disk image'; then
-    mount_point="$(hdiutil attach -nobrowse -readonly "$fname" | tail -1 | awk '{print $NF}')"
-    trap 'hdiutil detach "$mount_point" 2>/dev/null || true' EXIT
-    extract_from_dir "$mount_point"
-  else
-    echo "Unsupported file type: $file_type"
-    exit 1
-  fi
+  log "Unsupported file type: $ftype"
+  exit 1
 fi
