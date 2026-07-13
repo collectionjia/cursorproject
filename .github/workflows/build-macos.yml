@@ -39,12 +39,22 @@ jobs:
         run: python -m pip install pyinstaller
 
       - name: Extract original arm64 app (dmg or zip)
+        id: extract
         run: |
           chmod +x .github/scripts/extract_macos_app.sh
           set -x
           APP_PATH="$(.github/scripts/extract_macos_app.sh "$DOWNLOAD_URL")"
           echo "INPUT_APP=$APP_PATH" >> "$GITHUB_ENV"
           ls -la "$APP_PATH/Contents/MacOS" || true
+
+      - name: Upload extract debug on failure
+        if: failure() && steps.extract.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: extract-debug-arm64
+          path: extract_input/**
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Build patched arm64 app
         run: |
