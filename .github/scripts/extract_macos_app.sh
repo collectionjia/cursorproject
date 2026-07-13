@@ -144,30 +144,72 @@ raise SystemExit(1)
 PY
 }
 
+mount_device() {
+  local dev="$1"
+  local mountpoint="$2"
+  mkdir -p "$mountpoint"
+  if diskutil mount -readOnly -mountPoint "$mountpoint" "$dev" >&2; then
+    return 0
+  fi
+  for fstype in apfs hfs hfsplus; do
+    if mount -t "$fstype" -o ro "$dev" "$mountpoint" 2>>mount.err; then
+      return 0
+    fi
+  done
+  mount -o ro "$dev" "$mountpoint" 2>>mount.err
+}
+
 attach_dmg() {
   local dmg="$1"
-  local plist_file="$2"
-  log "hdiutil imageinfo:"
-  hdiutil imageinfo "$dmg" >&2 || true
+  local mountpoint="$2"
+  local plist_file="$3"
 
-  if ! hdiutil attach -nobrowse -readonly -skip-license-agreement -plist "$dmg" >"$plist_file" 2>attach.err; then
-    log "attach with skip-license failed:"
+  log "hdiutil imageinfo:"
+  hdiutil imageinfo "$dmg" >imageinfo.txt 2>&1 || true
+  cat imageinfo.txt >&2 || true
+
+  if hdiutil attach -nobrowse -readonly -skip-license-agreement -plist "$dmg" >"$plist_file" 2>attach.err; then
+    if mp="$(parse_mount_point "$plist_file" 2>/dev/null || true)" && [ -n "$mp" ] && [ -d "$mp" ]; then
+      log "Auto-mounted at: $mp"
+      echo "$mp"
+      return 0
+    fi
+    log "Attach plist had no mount-point; trying manual mount"
+  else
+    log "Auto attach failed"
     cat attach.err >&2 || true
-    hdiutil attach -nobrowse -readonly -plist "$dmg" >"$plist_file" 2>attach.err
   fi
 
-  parse_mount_point "$plist_file"
+  local dev=""
+  while IFS= read -r line; do
+    case "$line" in
+      /dev/*)
+        dev="$(echo "$line" | awk '{print $1}')"
+        ;;
+    esac
+  done < <(hdiutil attach -nomount -nobrowse -readonly -skip-license-agreement "$dmg" 2>>attach.err || \
+           hdiutil attach -nomount -nobrowse -readonly "$dmg" 2>>attach.err)
+
+  if [ -z "$dev" ]; then
+    log "Could not obtain /dev node for dmg"
+    cat attach.err >&2 || true
+    return 1
+  fi
+  log "Attached device node: $dev"
+  mount_device "$dev" "$mountpoint"
+  echo "$mountpoint"
 }
 
 lower="$(echo "$fname" | tr '[:upper:]' '[:lower:]')"
 ftype="$(file -b "$fname")"
 if [[ "$lower" == *.dmg ]] || echo "$ftype" | grep -qi 'disk image\|xar\|zlib'; then
   log "Extracting from DMG..."
+  MOUNTPOINT="$WORKDIR/mnt"
   PLIST_FILE="$WORKDIR/attach.plist"
-  MOUNTPOINT="$(attach_dmg "$fname" "$PLIST_FILE")"
-  log "Mounted at: $MOUNTPOINT"
-  trap 'hdiutil detach "$MOUNTPOINT" 2>/dev/null || true' EXIT
-  extract_from_dir "$MOUNTPOINT"
+  MOUNTED_AT="$(attach_dmg "$fname" "$MOUNTPOINT" "$PLIST_FILE")"
+  log "Using mount path: $MOUNTED_AT"
+  trap 'hdiutil detach "$MOUNTED_AT" 2>/dev/null || diskutil unmount force "$MOUNTED_AT" 2>/dev/null || true' EXIT
+  extract_from_dir "$MOUNTED_AT"
 elif [[ "$lower" == *.zip ]] || echo "$ftype" | grep -qi 'zip'; then
   log "Extracting from ZIP..."
   unzip -q "$fname"
