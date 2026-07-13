@@ -8,18 +8,23 @@ GitHub Actions 云端打包 macOS 版 — 操作步骤
 - 需要官方原版 macOS 安装包（.app），并打成 zip
 
 ────────────────────────────────────────
-第一步：准备原版 macOS 安装包 zip
+第一步：准备原版 macOS 安装包（支持 .dmg 或 .zip）
 ────────────────────────────────────────
 
-1. 获取官方 AIAssistant-360 macOS 版（两个架构各一份，如只要 Apple 芯片可只备 arm64）：
-   - Apple 芯片 (M1/M2/M3…)：darwin_arm64
-   - Intel Mac：darwin_x86_64
+1. 获取官方 AIAssistant-360 macOS 版（两个架构各一份）：
+   - Apple 芯片 (M1/M2/M3…)：arm64
+   - Intel Mac：x86_64
 
-2. 把 .app 打成 zip（结构示例）：
+2. 官方若是 .dmg，可直接使用，无需手动转 zip。
+   dmg 里通常结构为：
+   AIAssistant-360-arm64.dmg
+   └── AIAssistant-360.app
+
+   若是 .zip 也可以：
    AIAssistant-360-arm64.zip
    └── AIAssistant-360.app
 
-3. 把 zip 放到能直接下载的地址，任选一种：
+3. 把 .dmg 或 .zip 放到能直接下载的地址：
    A) 网盘「分享直链」（百度/阿里云/123 等，需 curl 能直接下到 zip）
    B) GitHub Release（见下方「附：用 GitHub Release 托管 zip」）
    C) 自己的服务器 HTTPS 链接
@@ -58,9 +63,9 @@ GitHub Actions 云端打包 macOS 版 — 操作步骤
 1. 打开仓库页面 → 顶部「Actions」
 2. 左侧选「Build macOS Patched App」
 3. 右侧「Run workflow」
-4. 填写：
-   - arm64_zip_url：Apple 芯片原版 zip 直链（必填）
-   - x86_zip_url：Intel 原版 zip 直链（可选，不填则只打 arm64）
+4. 填写（支持 .dmg 或 .zip 直链）：
+   - arm64_zip_url：Apple 芯片原版 dmg/zip 直链（必填）
+   - x86_zip_url：Intel 原版 dmg/zip 直链（两个都要就打填上）
 5. 点绿色「Run workflow」
 6. 等待约 5～15 分钟（两个 job 可并行）
 
@@ -100,7 +105,10 @@ Q: Actions 里找不到 workflow？
 A: 确认已 push .github/workflows/build-macos.yml，且默认分支是 main 或 master。
 
 Q: 下载 zip 失败 No .app found？
-A: zip 里必须包含 .app 目录，不要只打 dmg；或 zip 内套一层文件夹也可以。
+A: dmg/zip 里必须包含 .app；dmg 会自动挂载提取，无需你手动转换。
+
+Q: 只有 dmg 没有 zip 可以吗？
+A: 可以，直接把 dmg 下载直链填到 workflow 输入框即可。
 
 Q: 私有仓库 Release 的 zip，Actions 能下载吗？
 A: 同一仓库内 Release 资源是公开的下载链接，一般可直接用。

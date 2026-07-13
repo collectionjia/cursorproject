@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       arm64_zip_url:
-        description: "Apple Silicon 原版 .app 的 zip 下载地址（arm64）"
+        description: "Apple Silicon 原版安装包直链（支持 .dmg 或 .zip，arm64）"
         required: true
         type: string
       x86_zip_url:
-        description: "Intel 原版 .app 的 zip 下载地址（x86_64）"
+        description: "Intel 原版安装包直链（支持 .dmg 或 .zip，x86_64）"
         required: false
         type: string
 
@@ -27,19 +27,11 @@ jobs:
       - name: Install PyInstaller
         run: python -m pip install pyinstaller
 
-      - name: Download original arm64 app
+      - name: Extract original arm64 app (dmg or zip)
         run: |
-          set -euo pipefail
-          curl -fL "${{ inputs.arm64_zip_url }}" -o input.zip
-          unzip -q input.zip
-          APP="$(find . -name '*.app' -type d ! -path './.git/*' | head -1)"
-          if [ -z "$APP" ]; then
-            echo "No .app found in zip. Zip must contain a .app bundle."
-            find . -maxdepth 4 -type f -o -type d | head -50
-            exit 1
-          fi
-          echo "Found app: $APP"
-          echo "INPUT_APP=$APP" >> "$GITHUB_ENV"
+          chmod +x .github/scripts/extract_macos_app.sh
+          APP_PATH="$(.github/scripts/extract_macos_app.sh "${{ inputs.arm64_zip_url }}")"
+          echo "INPUT_APP=$APP_PATH" >> "$GITHUB_ENV"
 
       - name: Build patched arm64 app
         run: |
@@ -73,19 +65,11 @@ jobs:
       - name: Install PyInstaller
         run: python -m pip install pyinstaller
 
-      - name: Download original x86_64 app
+      - name: Extract original x86_64 app (dmg or zip)
         run: |
-          set -euo pipefail
-          curl -fL "${{ inputs.x86_zip_url }}" -o input.zip
-          unzip -q input.zip
-          APP="$(find . -name '*.app' -type d ! -path './.git/*' | head -1)"
-          if [ -z "$APP" ]; then
-            echo "No .app found in zip. Zip must contain a .app bundle."
-            find . -maxdepth 4 -type f -o -type d | head -50
-            exit 1
-          fi
-          echo "Found app: $APP"
-          echo "INPUT_APP=$APP" >> "$GITHUB_ENV"
+          chmod +x .github/scripts/extract_macos_app.sh
+          APP_PATH="$(.github/scripts/extract_macos_app.sh "${{ inputs.x86_zip_url }}")"
+          echo "INPUT_APP=$APP_PATH" >> "$GITHUB_ENV"
 
       - name: Build patched x86_64 app
         run: |

@@ -9,6 +9,7 @@ Set-Location $PSScriptRoot
 $files = @(
     ".gitignore",
     ".github/workflows/build-macos.yml",
+    ".github/scripts/extract_macos_app.sh",
     "build_macos.py",
     "patch_no_renew_menu.py",
     "pyinstxtractor.py",
