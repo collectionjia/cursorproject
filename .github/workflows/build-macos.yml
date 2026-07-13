@@ -43,6 +43,7 @@ jobs:
         run: |
           chmod +x .github/scripts/extract_macos_app.sh
           set -x
+          mkdir -p extract_input
           APP_PATH="$(.github/scripts/extract_macos_app.sh "$DOWNLOAD_URL" 2>extract_input/extract.log)"
           echo "INPUT_APP=$APP_PATH" >> "$GITHUB_ENV"
           ls -la "$APP_PATH/Contents/MacOS" || true
@@ -53,11 +54,8 @@ jobs:
         with:
           name: extract-debug-arm64
           path: |
-            extract_input/attach.err
-            extract_input/mount.err
-            extract_input/imageinfo.txt
-            extract_input/attach.plist
             extract_input/extract.log
+            extract_input/unar_out/**
           if-no-files-found: ignore
           retention-days: 3
 
@@ -99,7 +97,8 @@ jobs:
         run: |
           chmod +x .github/scripts/extract_macos_app.sh
           set -x
-          APP_PATH="$(.github/scripts/extract_macos_app.sh "$DOWNLOAD_URL")"
+          mkdir -p extract_input
+          APP_PATH="$(.github/scripts/extract_macos_app.sh "$DOWNLOAD_URL" 2>extract_input/extract.log)"
           echo "INPUT_APP=$APP_PATH" >> "$GITHUB_ENV"
           ls -la "$APP_PATH/Contents/MacOS" || true
 

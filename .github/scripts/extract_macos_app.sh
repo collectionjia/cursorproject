@@ -38,7 +38,7 @@ find_bundle_root() {
   local root="$1"
 
   local app
-  app="$(find "$root" -maxdepth 10 -name '*.app' -type d ! -path '*/.*' 2>/dev/null | head -1 || true)"
+  app="$(find "$root" -maxdepth 12 -name '*.app' -type d ! -path '*/.*' 2>/dev/null | head -1 || true)"
   if [ -n "$app" ]; then
     echo "$app"
     return 0
@@ -52,7 +52,7 @@ find_bundle_root() {
       echo "$bundle"
       return 0
     fi
-  done < <(find "$root" -maxdepth 10 -type d -path '*/Contents/MacOS' ! -path '*/.*' 2>/dev/null)
+  done < <(find "$root" -maxdepth 12 -type d -path '*/Contents/MacOS' ! -path '*/.*' 2>/dev/null)
 
   return 1
 }
@@ -68,7 +68,7 @@ find_loose_macho() {
         best_size="$size"
       fi
     fi
-  done < <(find "$root" -maxdepth 8 -type f ! -name '.*' 2>/dev/null)
+  done < <(find "$root" -maxdepth 10 -type f ! -name '.*' 2>/dev/null)
   [ -n "$best" ] || return 1
   echo "$best"
 }
@@ -104,7 +104,7 @@ EOF
 
 extract_from_dir() {
   local root="$1"
-  log "Listing mount/root: $root"
+  log "Listing root: $root"
   ls -la "$root" >&2 || true
   find "$root" -maxdepth 4 \( -type f -o -type d \) ! -path '*/.*' 2>/dev/null | head -120 >&2 || true
 
@@ -126,90 +126,50 @@ extract_from_dir() {
   fi
 
   log "No app bundle or Mach-O executable found under $root"
-  exit 1
+  return 1
 }
 
-parse_mount_point() {
-  local plist_file="$1"
-  python3 - "$plist_file" <<'PY'
-import plistlib, sys
-with open(sys.argv[1], "rb") as f:
-    pl = plistlib.load(f)
-for ent in pl.get("system-entities", []):
-    mp = ent.get("mount-point")
-    if mp:
-        print(mp)
-        raise SystemExit(0)
-raise SystemExit(1)
-PY
-}
-
-mount_device() {
-  local dev="$1"
-  local mountpoint="$2"
-  mkdir -p "$mountpoint"
-  if diskutil mount -readOnly -mountPoint "$mountpoint" "$dev" >&2; then
+ensure_unar() {
+  if command -v unar >/dev/null 2>&1; then
     return 0
   fi
-  for fstype in apfs hfs hfsplus; do
-    if mount -t "$fstype" -o ro "$dev" "$mountpoint" 2>>mount.err; then
-      return 0
-    fi
-  done
-  mount -o ro "$dev" "$mountpoint" 2>>mount.err
+  log "Installing unar via Homebrew..."
+  brew install unar
 }
 
-attach_dmg() {
+extract_dmg_with_unar() {
+  local dmg="$1"
+  local outdir="$2"
+  ensure_unar
+  rm -rf "$outdir"
+  mkdir -p "$outdir"
+  log "Extracting dmg with unar..."
+  unar -f -o "$outdir" "$dmg" >&2
+}
+
+extract_dmg_with_hdiutil() {
   local dmg="$1"
   local mountpoint="$2"
-  local plist_file="$3"
-
-  log "hdiutil imageinfo:"
-  hdiutil imageinfo "$dmg" >imageinfo.txt 2>&1 || true
-  cat imageinfo.txt >&2 || true
-
-  if hdiutil attach -nobrowse -readonly -skip-license-agreement -plist "$dmg" >"$plist_file" 2>attach.err; then
-    if mp="$(parse_mount_point "$plist_file" 2>/dev/null || true)" && [ -n "$mp" ] && [ -d "$mp" ]; then
-      log "Auto-mounted at: $mp"
-      echo "$mp"
-      return 0
-    fi
-    log "Attach plist had no mount-point; trying manual mount"
-  else
-    log "Auto attach failed"
-    cat attach.err >&2 || true
-  fi
-
-  local dev=""
-  while IFS= read -r line; do
-    case "$line" in
-      /dev/*)
-        dev="$(echo "$line" | awk '{print $1}')"
-        ;;
-    esac
-  done < <(hdiutil attach -nomount -nobrowse -readonly -skip-license-agreement "$dmg" 2>>attach.err || \
-           hdiutil attach -nomount -nobrowse -readonly "$dmg" 2>>attach.err)
-
-  if [ -z "$dev" ]; then
-    log "Could not obtain /dev node for dmg"
-    cat attach.err >&2 || true
-    return 1
-  fi
-  log "Attached device node: $dev"
-  mount_device "$dev" "$mountpoint"
+  log "Extracting dmg with hdiutil..."
+  mkdir -p "$mountpoint"
+  hdiutil attach -nobrowse -readonly -skip-license-agreement -mountpoint "$mountpoint" "$dmg" >&2
   echo "$mountpoint"
 }
 
 lower="$(echo "$fname" | tr '[:upper:]' '[:lower:]')"
 ftype="$(file -b "$fname")"
 if [[ "$lower" == *.dmg ]] || echo "$ftype" | grep -qi 'disk image\|xar\|zlib'; then
-  log "Extracting from DMG..."
-  MOUNTPOINT="$WORKDIR/mnt"
-  PLIST_FILE="$WORKDIR/attach.plist"
-  MOUNTED_AT="$(attach_dmg "$fname" "$MOUNTPOINT" "$PLIST_FILE")"
-  log "Using mount path: $MOUNTED_AT"
-  trap 'hdiutil detach "$MOUNTED_AT" 2>/dev/null || diskutil unmount force "$MOUNTED_AT" 2>/dev/null || true' EXIT
-  extract_from_dir "$MOUNTED_AT"
+  log "Processing DMG..."
+  UNAR_OUT="$WORKDIR/unar_out"
+  if extract_dmg_with_unar "$fname" "$UNAR_OUT" && extract_from_dir "$UNAR_OUT"; then
+  :
+  else
+    log "unar failed, trying hdiutil..."
+    MOUNTPOINT="$WORKDIR/mnt"
+    MOUNTED_AT="$(extract_dmg_with_hdiutil "$fname" "$MOUNTPOINT")"
+    trap 'hdiutil detach "$MOUNTED_AT" 2>/dev/null || true' EXIT
+    extract_from_dir "$MOUNTED_AT"
+  fi
 elif [[ "$lower" == *.zip ]] || echo "$ftype" | grep -qi 'zip'; then
   log "Extracting from ZIP..."
   unzip -q "$fname"
